@@ -47,7 +47,7 @@ const blankAssessment = {
 
 function EmergencyWizard() {
   const navigate = useNavigate();
-  const { setAssessment, buildPlan } = useApp();
+  const { createEmergency } = useApp();
   const [step, setStep] = useState(0);
   const [draft, setDraft] = useState({ ...blankAssessment });
   const [customTime, setCustomTime] = useState("");
@@ -71,10 +71,8 @@ function EmergencyWizard() {
       return;
     }
     const final = step === 1 && customTime ? { ...draft, time: customTime } : draft;
-    setAssessment(final);
-    void buildPlan(final);
+    void createEmergency(final);
     navigate({ to: "/diagnosis" });
-
   };
 
   return (

@@ -2,14 +2,22 @@ import { useEffect } from "react";
 
 import { useApp } from "./store";
 
-/** Ensures a personalized plan exists for the current assessment. */
+/** Ensures the active emergency has a generated plan. */
 export function useEnsurePlan() {
-  const { plan, planStatus, planError, buildPlan, assessment } = useApp();
+  const { plan, planStatus, planError, buildPlan, hasEmergency, activeEmergency, hydrated } =
+    useApp();
 
   useEffect(() => {
-    if (planStatus === "idle") void buildPlan(assessment);
+    if (activeEmergency && planStatus === "idle") void buildPlan();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [planStatus]);
+  }, [planStatus, activeEmergency?.id]);
 
-  return { plan, planStatus, planError, retry: () => buildPlan(assessment) };
+  return {
+    plan,
+    planStatus,
+    planError,
+    hasEmergency,
+    hydrated,
+    retry: () => buildPlan(),
+  };
 }
