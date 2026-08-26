@@ -30,7 +30,8 @@ function PlanPage() {
   const { assessment } = useApp();
   const { plan, planStatus, planError, retry, hasEmergency, hydrated } = useEnsurePlan();
 
-  if (hydrated && !hasEmergency) return <NoEmergency title="No recovery plan yet" />;
+  if (!hydrated) return null;
+  if (!hasEmergency) return <NoEmergency title="No recovery plan yet" />;
 
   if (!plan) {
     return (

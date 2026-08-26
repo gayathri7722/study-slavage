@@ -62,7 +62,7 @@ function Dashboard() {
     },
   ];
 
-  if (hydrated && !hasEmergency) {
+  if (!hydrated || !hasEmergency) {
     return (
       <AppShell>
         <div className="animate-rise">
