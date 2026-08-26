@@ -5,6 +5,7 @@ import { AppShell } from "@/components/AppShell";
 import { Bar, Btn, Chip, Panel, StatusDot } from "@/components/ui-kit";
 import { useApp } from "@/lib/store";
 import { useEnsurePlan } from "@/lib/use-plan";
+import { NoEmergency } from "@/components/NoEmergency";
 
 
 export const Route = createFileRoute("/diagnosis")({
@@ -32,7 +33,7 @@ const MESSAGES = [
 
 function Diagnosis() {
   const { assessment } = useApp();
-  const { plan, planStatus, planError, retry } = useEnsurePlan();
+  const { plan, planStatus, planError, retry, hasEmergency, hydrated } = useEnsurePlan();
   const [minDone, setMinDone] = useState(false);
   const [msg, setMsg] = useState(0);
 
@@ -52,7 +53,11 @@ function Diagnosis() {
   const recovery = Math.max(28, 92 - severity / 2 - deficit * 3);
   const mustCount = plan?.topics.filter((t) => t.tier === "must").length ?? 0;
 
-  const loading = !minDone || planStatus === "loading" || planStatus === "idle";
+  const noEmergency = hydrated && !hasEmergency;
+  const loading =
+    !noEmergency && (!minDone || planStatus === "loading" || planStatus === "idle");
+
+  if (noEmergency) return <NoEmergency title="No emergency to diagnose yet" />;
 
   if (loading) {
     return (
@@ -61,8 +66,8 @@ function Diagnosis() {
           <div className="grid size-20 place-items-center rounded-full border border-primary/40 bg-primary/10">
             <Activity className="size-8 animate-pulse text-primary" />
           </div>
-          <h1 className="mt-8 text-2xl font-bold">Running triage</h1>
-          <p className="mt-2 h-6 text-muted-foreground transition-all">{MESSAGES[msg]}</p>
+          <h1 className="mt-8 text-2xl font-bold">Analyzing your academic emergency...</h1>
+          <p className="mt-2 h-6 text-muted-foreground transition-all">{planStatus === "loading" || planStatus === "idle" ? MESSAGES[msg] : "Creating your personalized recovery plan..."}</p>
           <div className="mt-6 w-64">
             <Bar value={(msg + 1) * 20} />
           </div>

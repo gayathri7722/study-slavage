@@ -5,6 +5,7 @@ import { Btn, Chip, Panel } from "@/components/ui-kit";
 import { TIER_META, type Tier } from "@/lib/mock";
 import { useApp } from "@/lib/store";
 import { useEnsurePlan } from "@/lib/use-plan";
+import { NoEmergency } from "@/components/NoEmergency";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/plan")({
@@ -27,7 +28,10 @@ const TIERS: Tier[] = ["must", "should", "maybe", "ignore"];
 
 function PlanPage() {
   const { assessment } = useApp();
-  const { plan, planStatus, planError, retry } = useEnsurePlan();
+  const { plan, planStatus, planError, retry, hasEmergency, hydrated } = useEnsurePlan();
+
+  if (!hydrated) return null;
+  if (!hasEmergency) return <NoEmergency title="No recovery plan yet" />;
 
   if (!plan) {
     return (
@@ -44,7 +48,7 @@ function PlanPage() {
           ) : (
             <>
               <Loader2 className="size-8 animate-spin text-primary" />
-              <h1 className="mt-6 text-2xl font-bold">Building your {assessment.subject} plan</h1>
+              <h1 className="mt-6 text-2xl font-bold">Creating your personalized {assessment.subject} recovery plan...</h1>
               <p className="mt-2 text-muted-foreground">Ranking your topics by what earns marks.</p>
             </>
           )}
