@@ -221,7 +221,9 @@ function Dashboard() {
               <Brain className="size-5 text-ai" />
               <h2 className="mt-3 text-lg font-bold">Next best move</h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                Phase 1 — Stabilize. 30 minutes. Just get the Must Know list into your head.
+                {plan
+                  ? `Phase 1 — ${plan.phases[0]?.name ?? "Stabilize"}. ${plan.missionMinutes} minutes on ${plan.missionFocus}.`
+                  : "Building your plan — start Survival Mode once triage finishes."}
               </p>
             </div>
             <Link to="/mission" className="mt-6 block">
