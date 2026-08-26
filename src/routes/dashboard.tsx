@@ -201,7 +201,7 @@ function Dashboard() {
               <h2 className="text-lg font-bold">Academic vitals</h2>
             </div>
             <div className="mt-5 space-y-4">
-              {VITALS.map((v) => (
+              {vitals.map((v) => (
                 <div key={v.label}>
                   <div className="mb-1.5 flex justify-between text-sm">
                     <span className="text-muted-foreground">{v.label}</span>
