@@ -26,9 +26,9 @@ function Profile() {
     <AppShell>
       <div className="mx-auto max-w-2xl animate-rise">
         <Chip>PROFILE</Chip>
-        <h1 className="mt-4 text-3xl font-bold sm:text-4xl">Hey, {name}</h1>
+        <h1 className="mt-4 text-3xl font-bold sm:text-4xl">{name ? `Hey, ${name}` : "Welcome"}</h1>
         <p className="mt-2 text-muted-foreground">
-          Demo account — nothing is saved to a server, everything resets on refresh.
+          Add your name and it's saved on this device along with your emergencies and plans.
         </p>
 
         <Panel className="mt-7">
@@ -39,12 +39,13 @@ function Profile() {
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
+              placeholder="Your name"
               className="w-full rounded-xl border border-border bg-surface-2 px-4 py-3 text-sm outline-none focus:border-primary"
             />
           </label>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            <Info label="Current emergency" value={`${assessment.subject} — ${assessment.examName}`} />
-            <Info label="Deadline" value={assessment.deadline} />
+            <Info label="Current emergency" value={assessment.subject ? `${assessment.subject} — ${assessment.examName || "unnamed"}` : "None yet"} />
+            <Info label="Deadline" value={assessment.deadline || "—"} />
             <Info label="Target grade" value={assessment.targetGrade} />
             <Info label="Total XP" value={xp.toLocaleString()} />
           </div>
