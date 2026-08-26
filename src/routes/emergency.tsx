@@ -71,7 +71,7 @@ function EmergencyWizard() {
       return;
     }
     const final = step === 1 && customTime ? { ...draft, time: customTime } : draft;
-    void createEmergency(final);
+    createEmergency(final);
     navigate({ to: "/diagnosis" });
   };
 
