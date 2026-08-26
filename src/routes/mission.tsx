@@ -5,6 +5,7 @@ import { AppShell } from "@/components/AppShell";
 import { Bar, Btn, Chip, Panel } from "@/components/ui-kit";
 import { useApp } from "@/lib/store";
 import { useEnsurePlan } from "@/lib/use-plan";
+import { NoEmergency } from "@/components/NoEmergency";
 
 export const Route = createFileRoute("/mission")({
   head: () => ({
@@ -23,7 +24,7 @@ export const Route = createFileRoute("/mission")({
 
 function Mission() {
   const { assessment, setStuckOpen, completeMission } = useApp();
-  const { plan } = useEnsurePlan();
+  const { plan, hasEmergency, hydrated } = useEnsurePlan();
   const navigate = useNavigate();
   const total = (plan?.missionMinutes ?? 30) * 60;
   const [left, setLeft] = useState(total);
