@@ -57,6 +57,8 @@ function Mission() {
   const mm = String(Math.floor(left / 60)).padStart(2, "0");
   const ss = String(left % 60).padStart(2, "0");
 
+  if (hydrated && !hasEmergency) return <NoEmergency title="No mission to run yet" />;
+
   const finish = () => {
     setRunning(false);
     setDone(true);

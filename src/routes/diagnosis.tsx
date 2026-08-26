@@ -32,7 +32,7 @@ const MESSAGES = [
 ];
 
 function Diagnosis() {
-  const { assessment, activeEmergency } = useApp();
+  const { assessment } = useApp();
   const { plan, planStatus, planError, retry, hasEmergency, hydrated } = useEnsurePlan();
   const [minDone, setMinDone] = useState(false);
   const [msg, setMsg] = useState(0);
@@ -53,7 +53,7 @@ function Diagnosis() {
   const recovery = Math.max(28, 92 - severity / 2 - deficit * 3);
   const mustCount = plan?.topics.filter((t) => t.tier === "must").length ?? 0;
 
-  const noEmergency = hydrated && !activeEmergency;
+  const noEmergency = hydrated && !hasEmergency;
   const loading =
     !noEmergency && (!minDone || planStatus === "loading" || planStatus === "idle");
 
