@@ -12,6 +12,7 @@ import {
 import { generateStudyPlan } from "./plan.functions";
 import type { StudyPlan } from "./plan-types";
 import { EXPLAIN_STYLES, MIRACLE_STEPS, PHASES, TOPICS } from "./mock";
+import { analyze, newTopicId, type Analysis, type TaskStatus, type TopicInput } from "./priority";
 
 export type Assessment = {
   situations: string[];
@@ -26,6 +27,8 @@ export type Assessment = {
   hours: string;
   fileName: string;
   mistakes: string[];
+  availableHours: number;
+  items: TopicInput[];
 };
 
 export const blankAssessment: Assessment = {
@@ -41,7 +44,33 @@ export const blankAssessment: Assessment = {
   hours: "",
   fileName: "",
   mistakes: [],
+  availableHours: 0,
+  items: [],
 };
+
+/** Upgrades older saved assessments (free-text topics) to structured topic rows. */
+export function normalizeAssessment(a: Partial<Assessment>): Assessment {
+  const merged = { ...blankAssessment, ...a } as Assessment;
+  if (!Array.isArray(merged.items) || merged.items.length === 0) {
+    const diff = merged.difficulty === "Brutal" ? 3 : merged.difficulty === "Manageable" ? 1 : 2;
+    merged.items = (merged.topics || "")
+      .split(/[,\n]/)
+      .map((x) => x.trim())
+      .filter(Boolean)
+      .map((name) => ({
+        id: newTopicId(),
+        subject: merged.subject,
+        name,
+        examDate: "",
+        importance: 3,
+        prep: merged.progress,
+        difficulty: diff as 1 | 2 | 3,
+        estHours: 1.5,
+      }));
+  }
+  if (!merged.availableHours) merged.availableHours = Number(merged.hours) || 0;
+  return merged;
+}
 
 export type PlanStatus = "idle" | "loading" | "ready" | "error";
 
@@ -55,6 +84,9 @@ export type EmergencyRecord = {
   planStatus: PlanStatus;
   planError: string | null;
   missionsDone: number;
+  taskStatus: Record<string, TaskStatus>;
+  /** "What If?" override of available hours; null = use the assessment value. */
+  whatIfHours: number | null;
 };
 
 /** Card shape consumed by the dashboard. */
@@ -92,6 +124,9 @@ function loadState(): PersistedState {
       records: Array.isArray(parsed.records)
         ? parsed.records.map((r) => ({
             ...r,
+            assessment: normalizeAssessment(r.assessment),
+            taskStatus: r.taskStatus ?? {},
+            whatIfHours: r.whatIfHours ?? null,
             // never restore a transient state
             planStatus: r.plan ? "ready" : "idle",
             planError: null,
@@ -128,8 +163,29 @@ function demoRecord(): EmergencyRecord {
     hours: "6",
     fileName: "",
     mistakes: ["procrastinated", "underestimated"],
+    availableHours: 6,
+    items: [],
   };
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  assessment.items = [
+    ["Integration by parts", 4, 20, 3, 2],
+    ["u-substitution", 3, 50, 2, 1],
+    ["Definite integrals", 3, 30, 2, 1.5],
+    ["Partial fractions", 2, 10, 3, 2],
+    ["Improper integrals", 1, 0, 3, 1.5],
+  ].map(([name, imp, prep, diff, est]) => ({
+    id: newTopicId(),
+    subject: "Calculus II",
+    name: name as string,
+    examDate: tomorrow,
+    importance: imp as 1 | 2 | 3 | 4,
+    prep: prep as number,
+    difficulty: diff as 1 | 2 | 3,
+    estHours: est as number,
+  }));
   return {
+    taskStatus: {},
+    whatIfHours: null,
     id: newId(),
     createdAt: Date.now(),
     isDemo: true,
@@ -170,7 +226,12 @@ type Ctx = {
   stuckOpen: boolean;
   setStuckOpen: (v: boolean) => void;
   missionsDone: number;
-  completeMission: () => void;
+  completeMission: (topicId?: string) => void;
+  /** Rule-based priority analysis for the active emergency. */
+  analysis: Analysis | null;
+  effectiveHours: number;
+  setTaskStatus: (topicId: string, status: TaskStatus) => void;
+  setWhatIfHours: (h: number | null) => void;
   xp: number;
   plan: StudyPlan | null;
   planStatus: PlanStatus;
@@ -259,6 +320,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         planStatus: "idle",
         planError: null,
         missionsDone: 0,
+        taskStatus: {},
+        whatIfHours: null,
       };
       setRecords((rs) => [record, ...rs]);
       setActiveId(id);
@@ -285,10 +348,44 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setActiveId(demo.id);
   }, []);
 
-  const completeMission = useCallback(() => {
-    if (!activeEmergency) return;
-    patch(activeEmergency.id, { missionsDone: activeEmergency.missionsDone + 1 });
-  }, [activeEmergency, patch]);
+  const completeMission = useCallback(
+    (topicId?: string) => {
+      if (!activeEmergency) return;
+      patch(activeEmergency.id, {
+        missionsDone: activeEmergency.missionsDone + 1,
+        taskStatus: topicId
+          ? { ...activeEmergency.taskStatus, [topicId]: "done" }
+          : activeEmergency.taskStatus,
+      });
+    },
+    [activeEmergency, patch],
+  );
+
+  const setTaskStatus = useCallback(
+    (topicId: string, status: TaskStatus) => {
+      if (!activeEmergency) return;
+      patch(activeEmergency.id, { taskStatus: { ...activeEmergency.taskStatus, [topicId]: status } });
+    },
+    [activeEmergency, patch],
+  );
+
+  const setWhatIfHours = useCallback(
+    (h: number | null) => {
+      if (!activeEmergency) return;
+      patch(activeEmergency.id, { whatIfHours: h });
+    },
+    [activeEmergency, patch],
+  );
+
+  const effectiveHours =
+    activeEmergency?.whatIfHours ?? activeEmergency?.assessment.availableHours ?? 0;
+  const analysis = useMemo(
+    () =>
+      activeEmergency
+        ? analyze(activeEmergency.assessment.items, effectiveHours, activeEmergency.taskStatus)
+        : null,
+    [activeEmergency, effectiveHours],
+  );
 
   const emergencies = useMemo<Emergency[]>(
     () =>
@@ -297,10 +394,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
           96,
           100 - r.assessment.progress + r.assessment.situations.length * 4,
         );
-        const recovery = Math.max(
-          10,
-          Math.round(r.assessment.progress + r.missionsDone * 8 + (r.plan ? 10 : 0)),
-        );
+        const recovery = analyze(
+          r.assessment.items,
+          r.whatIfHours ?? r.assessment.availableHours,
+          r.taskStatus,
+        ).readiness;
         return {
           id: r.id,
           subject: r.assessment.subject || "Untitled subject",
@@ -333,6 +431,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setStuckOpen,
     missionsDone,
     completeMission,
+    analysis,
+    effectiveHours,
+    setTaskStatus,
+    setWhatIfHours,
     xp: missionsDone * 120,
     plan: activeEmergency?.plan ?? null,
     planStatus: activeEmergency?.planStatus ?? "idle",

@@ -1,9 +1,19 @@
 import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, ArrowRight, Check, FileUp } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Plus, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/AppShell";
 import { Bar, Btn, Chip, Panel } from "@/components/ui-kit";
-import { MISTAKES, SITUATIONS, TIME_OPTIONS } from "@/lib/mock";
+import { MISTAKES, SITUATIONS } from "@/lib/mock";
+import {
+  DIFFICULTY_LABEL,
+  IMPORTANCE_LABEL,
+  formatMin,
+  newTopicId,
+  type Difficulty,
+  type Importance,
+  type TopicInput,
+} from "@/lib/priority";
+import { blankAssessment, type Assessment } from "@/lib/store";
 import { useApp } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -25,32 +35,39 @@ export const Route = createFileRoute("/emergency")({
 
 const STEP_TITLES = [
   "What's happening?",
-  "How much time do you have?",
+  "How much time do you have, and when is the exam?",
   "What are you trying to save?",
   "What went wrong? Be honest, we don't judge.",
 ];
 
-const blankAssessment = {
-  situations: [] as string[],
-  time: "",
+const HOUR_PRESETS = [
+  { h: 0.25, label: "15 min" },
+  { h: 0.5, label: "30 min" },
+  { h: 2, label: "2 hours" },
+  { h: 4, label: "4 hours" },
+  { h: 6, label: "6 hours" },
+  { h: 8, label: "8 hours" },
+];
+
+const blankTopic = (examDate: string): TopicInput => ({
+  id: newTopicId(),
   subject: "",
-  examName: "",
-  deadline: "",
-  progress: 0,
-  targetGrade: "Pass comfortably (65%+)",
-  topics: "",
-  difficulty: "Hard",
-  hours: "",
-  fileName: "",
-  mistakes: [] as string[],
-};
+  name: "",
+  examDate,
+  importance: 3,
+  prep: 30,
+  difficulty: 2,
+  estHours: 1,
+});
 
 function EmergencyWizard() {
   const navigate = useNavigate();
   const { createEmergency } = useApp();
   const [step, setStep] = useState(0);
-  const [draft, setDraft] = useState({ ...blankAssessment });
-  const [customTime, setCustomTime] = useState("");
+  const [examDate, setExamDate] = useState("");
+  const [draft, setDraft] = useState<Assessment>(() => ({ ...blankAssessment, items: [blankTopic("")] }));
+  const upd = (id: string, u: Partial<TopicInput>) =>
+    setDraft((d) => ({ ...d, items: d.items.map((t) => (t.id === id ? { ...t, ...u } : t)) }));
 
   const toggle = (key: "situations" | "mistakes", id: string) =>
     setDraft((d) => ({
@@ -60,17 +77,33 @@ function EmergencyWizard() {
 
   const canNext =
     (step === 0 && draft.situations.length > 0) ||
-    (step === 1 && (draft.time.length > 0 || customTime.length > 0)) ||
-    (step === 2 && draft.subject.trim().length > 0) ||
+    (step === 1 && draft.availableHours > 0) ||
+    (step === 2 &&
+      draft.subject.trim().length > 0 &&
+      draft.items.some((t) => t.name.trim()) &&
+      draft.items.every((t) => !t.name.trim() || t.estHours > 0)) ||
     step === 3;
 
   const next = () => {
-    if (step === 1 && customTime) setDraft((d) => ({ ...d, time: customTime }));
     if (step < 3) {
       setStep(step + 1);
       return;
     }
-    const final = step === 1 && customTime ? { ...draft, time: customTime } : draft;
+    const items = draft.items
+      .filter((t) => t.name.trim())
+      .map((t) => ({ ...t, name: t.name.trim(), subject: t.subject.trim() || draft.subject.trim() }));
+    const avgPrep = Math.round(items.reduce((s, t) => s + t.prep, 0) / items.length);
+    const maxDiff = Math.max(...items.map((t) => t.difficulty));
+    const final: Assessment = {
+      ...draft,
+      items,
+      time: formatMin(draft.availableHours * 60),
+      hours: String(draft.availableHours),
+      deadline: examDate ? new Date(examDate + "T00:00").toDateString() : "",
+      topics: items.map((t) => t.name).join(", "),
+      progress: avgPrep,
+      difficulty: maxDiff === 3 ? "Brutal" : maxDiff === 2 ? "Hard" : "Manageable",
+    };
     createEmergency(final);
     navigate({ to: "/diagnosis" });
   };
@@ -112,126 +145,127 @@ function EmergencyWizard() {
 
           {step === 1 && (
             <div className="space-y-5">
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {TIME_OPTIONS.map((t) => (
+              <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+                {HOUR_PRESETS.map((p) => (
                   <button
-                    key={t}
-                    onClick={() => {
-                      setDraft((d) => ({ ...d, time: t }));
-                      setCustomTime("");
-                    }}
-                    aria-pressed={draft.time === t && !customTime}
+                    key={p.h}
+                    onClick={() => setDraft((d) => ({ ...d, availableHours: p.h }))}
+                    aria-pressed={draft.availableHours === p.h}
                     className={cn(
                       "rounded-2xl border px-3 py-5 text-sm font-bold transition-colors",
-                      draft.time === t && !customTime
+                      draft.availableHours === p.h
                         ? "border-warning bg-warning/10 text-warning"
                         : "border-border bg-surface hover:bg-surface-2",
                     )}
                   >
-                    {t}
+                    {p.label}
                   </button>
                 ))}
               </div>
-              <Field label="Or type exactly how long you've got">
-                <input
-                  value={customTime}
-                  onChange={(e) => setCustomTime(e.target.value)}
-                  placeholder="e.g. 3 hours 20 minutes"
-                  className={inputCls}
-                />
-              </Field>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Available study hours (exact)">
+                  <input
+                    type="number"
+                    min={0.25}
+                    step={0.25}
+                    value={draft.availableHours || ""}
+                    onChange={(e) => setDraft({ ...draft, availableHours: Number(e.target.value) })}
+                    placeholder="e.g. 3.5"
+                    className={inputCls}
+                  />
+                </Field>
+                <Field label="Exam / deadline date">
+                  <input
+                    type="date"
+                    value={examDate}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setExamDate(v);
+                      setDraft((d) => ({
+                        ...d,
+                        items: d.items.map((t) => (t.examDate && t.examDate !== examDate ? t : { ...t, examDate: v })),
+                      }));
+                    }}
+                    className={inputCls}
+                  />
+                </Field>
+              </div>
             </div>
           )}
 
           {step === 2 && (
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Subject">
-                <input
-                  value={draft.subject}
-                  onChange={(e) => setDraft({ ...draft, subject: e.target.value })}
-                  placeholder="e.g. Organic Chemistry"
-                  className={inputCls}
-                />
-              </Field>
-              <Field label="Exam / assignment name">
-                <input
-                  value={draft.examName}
-                  onChange={(e) => setDraft({ ...draft, examName: e.target.value })}
-                  placeholder="e.g. Midterm 2"
-                  className={inputCls}
-                />
-              </Field>
-              <Field label="Deadline">
-                <input
-                  value={draft.deadline}
-                  onChange={(e) => setDraft({ ...draft, deadline: e.target.value })}
-                  placeholder="e.g. Tomorrow, 9:00 AM"
-                  className={inputCls}
-                />
-              </Field>
-              <Field label="Target grade">
-                <select
-                  value={draft.targetGrade}
-                  onChange={(e) => setDraft({ ...draft, targetGrade: e.target.value })}
-                  className={inputCls}
-                >
-                  <option>Just pass (50%)</option>
-                  <option>Pass comfortably (65%+)</option>
-                  <option>Strong grade (75%+)</option>
-                  <option>Top of the class (85%+)</option>
-                </select>
-              </Field>
-              <Field label={`Current progress: ${draft.progress}%`}>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={draft.progress}
-                  onChange={(e) => setDraft({ ...draft, progress: Number(e.target.value) })}
-                  className="w-full accent-[oklch(0.59_0.235_27.5)]"
-                />
-              </Field>
-              <Field label="Difficulty">
-                <select
-                  value={draft.difficulty}
-                  onChange={(e) => setDraft({ ...draft, difficulty: e.target.value })}
-                  className={inputCls}
-                >
-                  <option>Manageable</option>
-                  <option>Hard</option>
-                  <option>Brutal</option>
-                </select>
-              </Field>
-              <Field label="Topics to cover" className="sm:col-span-2">
-                <textarea
-                  rows={3}
-                  value={draft.topics}
-                  onChange={(e) => setDraft({ ...draft, topics: e.target.value })}
-                  placeholder="List the topics you need to cover"
-                  className={inputCls}
-                />
-              </Field>
-              <Field label="Hours you can realistically study">
-                <input
-                  value={draft.hours}
-                  onChange={(e) => setDraft({ ...draft, hours: e.target.value })}
-                  placeholder="e.g. 6"
-                  className={inputCls}
-                />
-              </Field>
-              <Field label="Syllabus / notes (demo only)">
-                <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-border bg-surface-2 px-4 py-3 text-sm text-muted-foreground hover:border-ai/60">
-                  <FileUp className="size-4 text-ai" />
-                  {draft.fileName || "Drop a file or click to pick one"}
+            <div className="space-y-5">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Main subject">
                   <input
-                    type="file"
-                    className="sr-only"
-                    onChange={(e) =>
-                      setDraft({ ...draft, fileName: e.target.files?.[0]?.name ?? "" })
-                    }
+                    value={draft.subject}
+                    onChange={(e) => setDraft({ ...draft, subject: e.target.value })}
+                    placeholder="e.g. Organic Chemistry"
+                    className={inputCls}
                   />
-                </label>
-              </Field>
+                </Field>
+                <Field label="Exam / assignment name">
+                  <input
+                    value={draft.examName}
+                    onChange={(e) => setDraft({ ...draft, examName: e.target.value })}
+                    placeholder="e.g. Midterm 2"
+                    className={inputCls}
+                  />
+                </Field>
+                <Field label="Target grade">
+                  <select
+                    value={draft.targetGrade}
+                    onChange={(e) => setDraft({ ...draft, targetGrade: e.target.value })}
+                    className={inputCls}
+                  >
+                    <option>Just pass (50%)</option>
+                    <option>Pass comfortably (65%+)</option>
+                    <option>Strong grade (75%+)</option>
+                    <option>Top of the class (85%+)</option>
+                  </select>
+                </Field>
+              </div>
+
+              <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                Topics / chapters — one row each
+              </p>
+              {draft.items.map((t, i) => (
+                <Panel key={t.id} className="grid gap-3 sm:grid-cols-6">
+                  <Field label="Topic" className="sm:col-span-2">
+                    <input value={t.name} onChange={(e) => upd(t.id, { name: e.target.value })} placeholder="e.g. Aldol reactions" className={inputCls} />
+                  </Field>
+                  <Field label="Subject" className="sm:col-span-2">
+                    <input value={t.subject} onChange={(e) => upd(t.id, { subject: e.target.value })} placeholder={draft.subject || "Subject"} className={inputCls} />
+                  </Field>
+                  <Field label="Exam date" className="sm:col-span-2">
+                    <input type="date" value={t.examDate} onChange={(e) => upd(t.id, { examDate: e.target.value })} className={inputCls} />
+                  </Field>
+                  <Field label="Importance" className="sm:col-span-2">
+                    <select value={t.importance} onChange={(e) => upd(t.id, { importance: Number(e.target.value) as Importance })} className={inputCls}>
+                      {[1, 2, 3, 4].map((v) => <option key={v} value={v}>{IMPORTANCE_LABEL[v as Importance]}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Difficulty" className="sm:col-span-2">
+                    <select value={t.difficulty} onChange={(e) => upd(t.id, { difficulty: Number(e.target.value) as Difficulty })} className={inputCls}>
+                      {[1, 2, 3].map((v) => <option key={v} value={v}>{DIFFICULTY_LABEL[v as Difficulty]}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Est. study hours" className="sm:col-span-2">
+                    <input type="number" min={0.25} step={0.25} value={t.estHours || ""} onChange={(e) => upd(t.id, { estHours: Number(e.target.value) })} className={inputCls} />
+                  </Field>
+                  <Field label={`Preparation: ${t.prep}%`} className="sm:col-span-5">
+                    <input type="range" min={0} max={100} step={5} value={t.prep} onChange={(e) => upd(t.id, { prep: Number(e.target.value) })} className="w-full accent-[oklch(0.59_0.235_27.5)]" />
+                  </Field>
+                  <div className="flex items-end sm:col-span-1">
+                    <Btn tone="ghost" size="sm" disabled={draft.items.length === 1} onClick={() => setDraft((d) => ({ ...d, items: d.items.filter((x) => x.id !== t.id) }))}>
+                      <Trash2 className="size-4" /> {i >= 0 ? "Remove" : ""}
+                    </Btn>
+                  </div>
+                </Panel>
+              ))}
+              <Btn tone="outline" onClick={() => setDraft((d) => ({ ...d, items: [...d.items, blankTopic(examDate)] }))}>
+                <Plus className="size-4" /> Add topic
+              </Btn>
             </div>
           )}
 
