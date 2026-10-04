@@ -90,6 +90,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         content: "Triage your academic crisis and get a prioritized recovery plan.",
       },
       { property: "og:type", content: "website" },
+      { name: "google-site-verification", content: "gQeq5qNETYXkgA-Aem1rJes2PBVLKKbpJZFaw53EFro" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
     links: [
